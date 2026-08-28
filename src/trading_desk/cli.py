@@ -7,6 +7,9 @@ from trading_desk.data import fetch_hourly
 from trading_desk.indicators import prepare
 from trading_desk.head_of_desk import decide
 from trading_desk.backtest import run_backtest
+from trading_desk.runner import run_hourly
+from trading_desk.grader import grade_due_predictions
+from trading_desk.scorecard import build_scorecard
 
 
 def main():
@@ -18,12 +21,15 @@ def main():
     bt.add_argument("--days", type=int, default=180)
 
     sub.add_parser("scan")
+    sub.add_parser("run-hourly")
+    sub.add_parser("grade")
+    sub.add_parser("scorecard")
 
     args = parser.parse_args()
     cfg = Config()
 
     if cfg.live_trading_enabled:
-        raise SystemExit("V0 refuses to run with LIVE_TRADING_ENABLED=true.")
+        raise SystemExit("Trading desk refuses to run with LIVE_TRADING_ENABLED=true.")
 
     if args.command == "backtest":
         df = fetch_hourly(args.symbol, args.days, cfg)
@@ -37,3 +43,15 @@ def main():
             row = df.iloc[-1]
             decision = decide(symbol, row)
             print(json.dumps(asdict(decision), indent=2, default=str))
+        return
+
+    if args.command == "run-hourly":
+        print(json.dumps(run_hourly(cfg), indent=2, default=str))
+        return
+
+    if args.command == "grade":
+        print(json.dumps(grade_due_predictions(cfg), indent=2))
+        return
+
+    if args.command == "scorecard":
+        print(json.dumps(build_scorecard(), indent=2, default=str))

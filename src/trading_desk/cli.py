@@ -7,9 +7,6 @@ from trading_desk.data import fetch_hourly
 from trading_desk.indicators import prepare
 from trading_desk.head_of_desk import decide
 from trading_desk.backtest import run_backtest
-from trading_desk.runner import run_hourly
-from trading_desk.grader import grade_due_predictions
-from trading_desk.scorecard import build_scorecard
 
 
 def main():
@@ -24,12 +21,13 @@ def main():
     sub.add_parser("run-hourly")
     sub.add_parser("grade")
     sub.add_parser("scorecard")
+    sub.add_parser("paper-execute")
 
     args = parser.parse_args()
     cfg = Config()
 
     if cfg.live_trading_enabled:
-        raise SystemExit("Trading desk refuses to run with LIVE_TRADING_ENABLED=true.")
+        raise SystemExit("This release refuses to run with LIVE_TRADING_ENABLED=true.")
 
     if args.command == "backtest":
         df = fetch_hourly(args.symbol, args.days, cfg)
@@ -46,12 +44,21 @@ def main():
         return
 
     if args.command == "run-hourly":
+        from trading_desk.runner import run_hourly
         print(json.dumps(run_hourly(cfg), indent=2, default=str))
         return
 
     if args.command == "grade":
-        print(json.dumps(grade_due_predictions(cfg), indent=2))
+        from trading_desk.grader import grade_due_predictions
+        print(json.dumps(grade_due_predictions(cfg), indent=2, default=str))
         return
 
     if args.command == "scorecard":
+        from trading_desk.scorecard import build_scorecard
         print(json.dumps(build_scorecard(), indent=2, default=str))
+        return
+
+    if args.command == "paper-execute":
+        from trading_desk.paper_executor import run_paper_execution
+        print(json.dumps(run_paper_execution(cfg), indent=2, default=str))
+        return

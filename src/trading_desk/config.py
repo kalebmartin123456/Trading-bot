@@ -4,8 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def _f(name: str, default: float) -> float:
     return float(os.getenv(name, default))
+
 
 def _b(name: str, default: bool) -> bool:
     raw = os.getenv(name)
@@ -13,11 +15,13 @@ def _b(name: str, default: bool) -> bool:
         return default
     return raw.lower() in {"1", "true", "yes", "on"}
 
+
 @dataclass(frozen=True)
 class Config:
     alpaca_api_key: str = os.getenv("ALPACA_API_KEY", "")
     alpaca_secret_key: str = os.getenv("ALPACA_SECRET_KEY", "")
     paper_trading: bool = _b("PAPER_TRADING", True)
+    paper_execution_enabled: bool = _b("PAPER_EXECUTION_ENABLED", False)
     live_trading_enabled: bool = _b("LIVE_TRADING_ENABLED", False)
 
     initial_equity: float = _f("INITIAL_EQUITY", 10_000)
@@ -29,5 +33,10 @@ class Config:
 
     assumed_fee_bps: float = _f("ASSUMED_FEE_BPS", 10)
     assumed_slippage_bps: float = _f("ASSUMED_SLIPPAGE_BPS", 5)
+
+    # Paper execution adds a second, deliberately conservative cap. Even if the
+    # research risk engine calculates a larger position, V1 paper orders cannot
+    # exceed this fraction of account equity per symbol.
+    paper_max_order_equity_pct: float = _f("PAPER_MAX_ORDER_EQUITY_PCT", 0.10)
 
     symbols: tuple[str, ...] = ("BTC/USD", "ETH/USD")

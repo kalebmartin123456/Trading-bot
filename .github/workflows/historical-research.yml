@@ -1,0 +1,37 @@
+name: Historical Research
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retrospective:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        symbol: ['BTC/USD', 'ETH/USD']
+        days: [90, 180, 365, 730]
+    env:
+      ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+      ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+      PAPER_TRADING: 'true'
+      LIVE_TRADING_ENABLED: 'false'
+      INITIAL_EQUITY: '10000'
+      RISK_PER_TRADE: '0.0035'
+      MAX_SYMBOL_EXPOSURE: '0.20'
+      MAX_TOTAL_EXPOSURE: '0.35'
+      DAILY_LOSS_LIMIT: '0.01'
+      MAX_DRAWDOWN: '0.08'
+      ASSUMED_FEE_BPS: '10'
+      ASSUMED_SLIPPAGE_BPS: '5'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e .
+      - name: Run conservative next-bar replay
+        run: trading-desk backtest --symbol "${{ matrix.symbol }}" --days ${{ matrix.days }}

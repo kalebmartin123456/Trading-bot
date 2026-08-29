@@ -13,7 +13,7 @@ A deliberately constrained crypto research + paper-trading system.
 
 ## What runs automatically
 
-Every hour the desk:
+Every hour the research desk:
 
 1. Fetches recent BTC/USD and ETH/USD hourly bars.
 2. Ignores the still-forming candle.
@@ -23,6 +23,26 @@ Every hour the desk:
 6. Commits the updated research history back to the repository.
 
 The JSONL ledger is intentionally Git-friendly so every prediction and subsequent outcome is auditable.
+
+## Paper brokerage execution
+
+V1 now contains a real Alpaca paper brokerage execution path. It is opt-in and paper-only.
+
+`trading-desk paper-execute` performs one reconciliation/execution cycle:
+
+1. Connects to Alpaca with `TradingClient(..., paper=True)`.
+2. Reads actual paper account equity, buying power, positions, and open orders.
+3. Refuses to trade if unexpected or unmanaged positions exist.
+4. Evaluates the latest fully closed hourly candle.
+5. Exits managed positions when the desk turns FLAT or the software stop is breached.
+6. Sends every proposed entry through the deterministic Risk Engine.
+7. Applies an additional 10% of equity per-order paper cap.
+8. Uses deterministic client order IDs so a repeated cycle cannot intentionally submit the same signal twice.
+9. Persists stop/provenance state in `data/paper_execution_state.json`.
+
+This release has no live brokerage path. The paper broker hard-codes `paper=True`, and the CLI refuses to start when `LIVE_TRADING_ENABLED=true`.
+
+Important: V1 stops are software-managed and checked on the hourly execution cadence. They are not broker-native resting stop orders. That gap is intentional for the first execution experiment and must be included when evaluating performance.
 
 ## Agents
 
@@ -39,6 +59,7 @@ The JSONL ledger is intentionally Git-friendly so every prediction and subsequen
 - Max total exposure: 35% of equity
 - Daily loss stop: 1%
 - Portfolio drawdown kill switch: 8%
+- Paper V1 max new order: 10% of equity
 - No leverage
 - No shorts
 - Live execution disabled
@@ -51,19 +72,32 @@ trading-desk backtest --symbol BTC/USD --days 180
 trading-desk run-hourly
 trading-desk grade
 trading-desk scorecard
+trading-desk paper-execute
 ```
+
+## Turning paper execution on
+
+Keep credentials out of the repository. Configure Alpaca paper credentials as environment/repository secrets, then set:
+
+```text
+PAPER_TRADING=true
+PAPER_EXECUTION_ENABLED=true
+LIVE_TRADING_ENABLED=false
+```
+
+Do not use live-account credentials for the paper experiment.
 
 ## GitHub Actions
 
 `CI` runs tests on pushes and pull requests.
 
-`Hourly Forward Test` runs at minute 7 of every hour and can also be started manually. It expects repository secrets named `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`. Keep `LIVE_TRADING_ENABLED=false`.
+`Hourly Forward Test` runs at minute 7 of every hour and can also be started manually. It expects repository secrets named `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`. The research workflow does not currently place paper orders; execution remains a separate explicit command until credentials and the first reconciliation are verified.
 
 ## Promotion gate before any meaningful live capital
 
 Do not promote the system because of a few profitable days. Minimum research gate:
 
-- At least 100 forward-tested trades
+- At least 100 forward-tested completed trades
 - Positive net expectancy after realistic fees/slippage
 - Profit factor >= 1.30
 - Max drawdown < 8%

@@ -98,6 +98,24 @@ class PaperAlpacaBroker:
         target = canonical_crypto_symbol(symbol)
         return any(canonical_crypto_symbol(order.symbol or "") == target for order in self.open_orders())
 
+    def cancel_open_orders(
+        self,
+        symbols: set[str] | None = None,
+        preserve_client_id_prefixes: tuple[str, ...] = (),
+    ) -> list[str]:
+        targets = {canonical_crypto_symbol(s) for s in symbols} if symbols else None
+        cancelled: list[str] = []
+        for order in self.open_orders():
+            symbol = canonical_crypto_symbol(order.symbol or "")
+            if targets is not None and symbol not in targets:
+                continue
+            client_id = str(getattr(order, "client_order_id", "") or "")
+            if client_id.startswith(preserve_client_id_prefixes):
+                continue
+            self.client.cancel_order_by_id(order.id)
+            cancelled.append(str(order.id))
+        return cancelled
+
     def get_order_by_client_id(self, client_order_id: str):
         try:
             return self.client.get_order_by_client_id(client_order_id)

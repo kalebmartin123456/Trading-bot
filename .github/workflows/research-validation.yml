@@ -1,0 +1,41 @@
+name: Sealed Research Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      end:
+        description: 'Fixed ISO-8601 UTC cutoff'
+        required: true
+        default: '2026-08-30T16:00:00+00:00'
+      days:
+        description: 'Chronological evaluation days'
+        required: true
+        default: '730'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+      ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+      PAPER_TRADING: 'true'
+      LIVE_TRADING_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e .
+      - name: Compare baseline and candidate without scoring holdout
+        env:
+          RESEARCH_DAYS: ${{ inputs.days }}
+          RESEARCH_END: ${{ inputs.end }}
+        run: trading-desk research-validate --days "$RESEARCH_DAYS" --end "$RESEARCH_END" > research-validation.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sealed-research-validation
+          path: research-validation.json
+          retention-days: 90

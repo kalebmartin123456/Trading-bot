@@ -2,9 +2,11 @@ name: Historical Research
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.backtest-trigger'
+    inputs:
+      end:
+        description: 'Fixed ISO-8601 UTC cutoff (forming bar excluded)'
+        required: true
+        default: '2026-08-30T16:00:00+00:00'
 
 permissions:
   contents: read
@@ -37,4 +39,6 @@ jobs:
           python-version: '3.11'
       - run: pip install -e .
       - name: Run conservative next-bar replay
-        run: trading-desk backtest --symbol "${{ matrix.symbol }}" --days ${{ matrix.days }}
+        env:
+          RESEARCH_END: ${{ inputs.end }}
+        run: trading-desk backtest --symbol "${{ matrix.symbol }}" --days ${{ matrix.days }} --end "$RESEARCH_END"

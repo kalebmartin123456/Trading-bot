@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal
 
 Direction = Literal["LONG", "FLAT"]
+HaltKind = Literal["daily_loss", "portfolio_drawdown", "insolvent", "operator"]
 
 @dataclass
 class AgentSignal:
@@ -34,3 +35,10 @@ class RiskDecision:
     notional: float = 0.0
     risk_dollars: float = 0.0
     reason: str = ""
+
+
+@dataclass(frozen=True)
+class RiskHalt:
+    kind: HaltKind
+    reason: str
+    manual_resume_required: bool

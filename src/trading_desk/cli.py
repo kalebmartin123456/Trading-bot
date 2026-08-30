@@ -1,6 +1,6 @@
 import argparse
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 
 from trading_desk.config import Config
@@ -28,6 +28,18 @@ def main():
     sub.add_parser("scorecard")
     sub.add_parser("paper-execute")
 
+    research = sub.add_parser("research-validate")
+    research.add_argument("--days", type=int, default=730)
+    research.add_argument(
+        "--end",
+        required=True,
+        help="Required fixed ISO-8601 UTC cutoff. The final 20%% remains sealed.",
+    )
+    research.add_argument(
+        "--breadth-universe",
+        help="Optional comma-separated research universe; execution remains BTC/ETH.",
+    )
+
     args = parser.parse_args()
     cfg = Config()
 
@@ -35,9 +47,22 @@ def main():
         raise SystemExit("This release refuses to run with LIVE_TRADING_ENABLED=true.")
 
     if args.command == "backtest":
-        end = datetime.fromisoformat(args.end.replace("Z", "+00:00")) if args.end else None
-        df = fetch_hourly(args.symbol, args.days, cfg, end=end)
-        result = run_backtest(args.symbol, df, cfg)
+        end = (
+            datetime.fromisoformat(args.end.replace("Z", "+00:00"))
+            if args.end
+            else datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        )
+        # Fetch causal warm-up before the requested evaluation boundary so a
+        # 90-day test contains 90 days of tradeable bars, not 90 days minus the
+        # indicator warm-up period.
+        df = fetch_hourly(args.symbol, args.days + 30, cfg, end=end)
+        result = run_backtest(
+            args.symbol,
+            df,
+            cfg,
+            trade_start=end - timedelta(days=args.days),
+            trade_end=end,
+        )
         print(json.dumps(asdict(result), indent=2))
         return
 
@@ -67,4 +92,34 @@ def main():
     if args.command == "paper-execute":
         from trading_desk.paper_executor import run_paper_execution
         print(json.dumps(run_paper_execution(cfg), indent=2, default=str))
+        return
+
+    if args.command == "research-validate":
+        from trading_desk.data import fetch_hourly_many
+        from trading_desk.research_validation import (
+            DEFAULT_BREADTH_UNIVERSE,
+            evaluation_start,
+            research_fetch_days,
+            run_sealed_validation,
+        )
+
+        end = datetime.fromisoformat(args.end.replace("Z", "+00:00"))
+        universe = (
+            tuple(value.strip() for value in args.breadth_universe.split(",") if value.strip())
+            if args.breadth_universe
+            else DEFAULT_BREADTH_UNIVERSE
+        )
+        frames = fetch_hourly_many(
+            universe,
+            research_fetch_days(args.days),
+            cfg,
+            end=end,
+        )
+        result = run_sealed_validation(
+            frames=frames,
+            cfg=cfg,
+            evaluation_start=evaluation_start(end, args.days),
+            evaluation_end=end,
+        )
+        print(json.dumps(result, indent=2, default=str))
         return

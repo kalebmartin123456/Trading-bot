@@ -32,17 +32,21 @@ V1 now contains a real Alpaca paper brokerage execution path. It is opt-in and p
 
 1. Connects to Alpaca with `TradingClient(..., paper=True)`.
 2. Reads actual paper account equity, buying power, positions, and open orders.
-3. Refuses to trade if unexpected or unmanaged positions exist.
-4. Evaluates the latest fully closed hourly candle.
-5. Exits managed positions when the desk turns FLAT or the software stop is breached.
-6. Sends every proposed entry through the deterministic Risk Engine.
-7. Applies an additional 10% of equity per-order paper cap.
-8. Uses deterministic client order IDs so a repeated cycle cannot intentionally submit the same signal twice.
-9. Persists stop/provenance state in `data/paper_execution_state.json`.
+3. Persists a hard operator halt if positions, orders, symbols, or account state do not reconcile.
+4. Rejects stale, invalid, future-dated, or cross-symbol-unsynchronized market data.
+5. Cancels desk orders and liquidates managed positions on daily-loss, drawdown, insolvency, data, or operator halts.
+6. Evaluates the latest fully closed hourly candle.
+7. Exits managed positions when the desk turns FLAT or the software stop is breached.
+8. Sends every proposed entry through the deterministic Risk Engine.
+9. Applies an additional 10% of equity per-order paper cap and four-order cycle cap.
+10. Uses deterministic client order IDs so repeated cycles are broker-idempotent.
+11. Atomically persists state and appends a flushed JSONL audit record.
 
 This release has no live brokerage path. The paper broker hard-codes `paper=True`, and the CLI refuses to start when `LIVE_TRADING_ENABLED=true`.
 
-Important: V1 stops are software-managed and checked on the hourly execution cadence. They are not broker-native resting stop orders. That gap is intentional for the first execution experiment and must be included when evaluating performance.
+Hard drawdown/insolvency/operator halts never auto-clear. A daily-loss halt may clear on the next UTC day only after all positions and orders are confirmed empty.
+
+Important: V1 stops are software-managed and checked on the hourly execution cadence. They are not broker-native resting stop orders. A process/API outage or intrahour gap can therefore exceed the modeled stop. See [`docs/paper_operations.md`](docs/paper_operations.md) for activation, recovery, and known limitations.
 
 ## Agents
 
@@ -68,7 +72,8 @@ Important: V1 stops are software-managed and checked on the hourly execution cad
 
 ```bash
 trading-desk scan
-trading-desk backtest --symbol BTC/USD --days 180
+trading-desk backtest --symbol BTC/USD --days 180 --end 2026-08-30T16:00:00+00:00
+trading-desk research-validate --days 730 --end 2026-08-30T16:00:00+00:00
 trading-desk run-hourly
 trading-desk grade
 trading-desk scorecard
@@ -93,6 +98,8 @@ Do not use live-account credentials for the paper experiment.
 
 `Hourly Forward Test` runs at minute 7 of every hour and can also be started manually. It expects repository secrets named `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`. The research workflow does not currently place paper orders; execution remains a separate explicit command until credentials and the first reconciliation are verified.
 
+`Historical Research` and `Sealed Research Validation` are manual, read-only workflows requiring a fixed cutoff. The sealed workflow scores only the first 80% of the chronological interval and uploads its JSON report without evaluating the final 20%.
+
 ## Promotion gate before any meaningful live capital
 
 Do not promote the system because of a few profitable days. Minimum research gate:
@@ -115,3 +122,5 @@ expectancies were negative after modeled costs. Live promotion remains blocked.
 
 See [`research/baseline_2026-08-30.md`](research/baseline_2026-08-30.md) for the
 full results, regime diagnostics, and audit findings.
+
+The first breadth/relative-strength candidate also failed its profitability gate. It reduced validation losses and drawdown, especially in the falling regime, but both assets still had negative returns, negative expectancy, and profit factor below 1. It remains research-only; its final holdout was not scored. See [`research/relative_strength_v1_2026-08-30.md`](research/relative_strength_v1_2026-08-30.md).

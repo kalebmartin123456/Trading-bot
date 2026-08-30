@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+from datetime import datetime
 import math
+from typing import Callable
 import pandas as pd
 
 from trading_desk.config import Config
@@ -37,9 +39,11 @@ class BacktestResult:
     average_holding_hours: float
     stop_exits: int
     signal_exits: int
+    risk_halt_exits: int
     modeled_costs_dollars: float
     open_position: bool
     unrealized_pnl_dollars: float
+    entry_filter_rejections: int
 
 
 def run_backtest(
@@ -47,6 +51,9 @@ def run_backtest(
     df: pd.DataFrame,
     cfg: Config,
     trade_log: list[dict] | None = None,
+    entry_filter: Callable[[str, pd.Series], bool] | None = None,
+    trade_start: datetime | pd.Timestamp | None = None,
+    trade_end: datetime | pd.Timestamp | None = None,
 ) -> BacktestResult:
     """Replay the fixed desk through history without same-bar execution.
 
@@ -56,6 +63,17 @@ def run_backtest(
     conservative than filling at the same close that created the signal.
     """
     data = prepare(df).dropna().copy()
+    if trade_start is not None:
+        start = pd.Timestamp(trade_start)
+        start = start.tz_localize("UTC") if start.tzinfo is None else start.tz_convert("UTC")
+        start_position = data.index.searchsorted(start)
+        if start_position < 1:
+            raise ValueError("Backtest needs at least one prepared signal bar before trade_start.")
+        data = data.iloc[start_position - 1 :]
+    if trade_end is not None:
+        end = pd.Timestamp(trade_end)
+        end = end.tz_localize("UTC") if end.tzinfo is None else end.tz_convert("UTC")
+        data = data[data.index < end]
     if len(data) < 2:
         raise ValueError("Backtest requires at least two prepared bars.")
 
@@ -67,12 +85,15 @@ def run_backtest(
     peak = cash
     day_start_equity = cash
     current_day = None
+    hard_halted = False
+    daily_halted = False
     trade_pnls: list[float] = []
     trade_returns: list[float] = []
     holding_hours: list[float] = []
     exit_reasons: list[str] = []
     modeled_costs = 0.0
     exposed_bars = 0
+    entry_filter_rejections = 0
     max_dd = 0.0
     risk = RiskEngine(cfg)
     one_way_cost = (cfg.assumed_fee_bps + cfg.assumed_slippage_bps) / 10_000
@@ -124,9 +145,33 @@ def run_backtest(
         if current_day != ts.date():
             current_day = ts.date()
             day_start_equity = equity_at_open
+            daily_halted = False
         peak = max(peak, equity_at_open)
         dd = (peak - equity_at_open) / peak if peak else 0
         max_dd = max(max_dd, dd)
+
+        # Match the fail-closed executor: a hard portfolio halt persists for the
+        # rest of the replay, while a daily-loss halt can clear only at the next
+        # UTC day boundary. Any managed position is liquidated at the first
+        # observable next-bar open, including modeled exit costs.
+        if hard_halted or daily_halted:
+            continue
+        halt = risk.halt_reason(
+            equity=equity_at_open,
+            peak_equity=peak,
+            day_start_equity=day_start_equity,
+        )
+        if halt is not None:
+            if halt.manual_resume_required:
+                hard_halted = True
+            else:
+                daily_halted = True
+            if qty > 0:
+                close_position(open_price, ts, "risk_halt")
+                end_equity = cash
+                peak = max(peak, end_equity)
+                max_dd = max(max_dd, (peak - end_equity) / peak if peak else 0.0)
+            continue
 
         signal = decide(symbol, signal_row)
 
@@ -155,6 +200,9 @@ def run_backtest(
                 continue
 
         if qty == 0 and signal.direction == "LONG" and signal.stop_price is not None:
+            if entry_filter is not None and not entry_filter(symbol, signal_row):
+                entry_filter_rejections += 1
+                continue
             # The stop was derived only from the closed signal bar. If price gaps
             # through it before our next-bar entry, skip rather than inventing a fill.
             if open_price <= signal.stop_price:
@@ -255,7 +303,9 @@ def run_backtest(
         average_holding_hours=(sum(holding_hours) / trades) if trades else 0.0,
         stop_exits=exit_reasons.count("stop"),
         signal_exits=exit_reasons.count("signal"),
+        risk_halt_exits=exit_reasons.count("risk_halt"),
         modeled_costs_dollars=modeled_costs,
-        open_position=qty > 0,
+        open_position=bool(qty > 0),
         unrealized_pnl_dollars=unrealized_pnl,
+        entry_filter_rejections=entry_filter_rejections,
     )

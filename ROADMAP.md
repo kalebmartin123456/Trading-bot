@@ -29,6 +29,8 @@ Add independent inputs:
 
 LLMs must return structured JSON. They may propose or veto trades; they may not size positions.
 
+First candidate (2026-08-30): ten-asset breadth + relative strength was rejected. It improved defensive selectivity but remained negative in absolute return, profit factor, and expectancy. The final 20% holdout was left sealed.
+
 ## V3 — learning layer
 Calibrate each agent by:
 - asset
@@ -48,6 +50,8 @@ Require:
 - max order count
 - kill switch
 - audit log
+
+Implementation status: built and regression-tested as a fail-closed, paper-only path. Hard halts persist, desk orders are cancelled before managed-position liquidation, unsafe market data halts execution, state writes are atomic, and every completed cycle is audited. It remains disabled because the research gate has not passed and broker-native stop protection/operational alerting are not complete.
 
 ## V5 — tiny live capital
 Only after written promotion gate is passed.

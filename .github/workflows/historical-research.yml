@@ -2,6 +2,9 @@ name: Historical Research
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.backtest-trigger'
 
 permissions:
   contents: read

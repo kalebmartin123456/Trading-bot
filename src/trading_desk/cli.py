@@ -1,5 +1,6 @@
 import argparse
 from dataclasses import asdict
+from datetime import datetime
 import json
 
 from trading_desk.config import Config
@@ -16,6 +17,10 @@ def main():
     bt = sub.add_parser("backtest")
     bt.add_argument("--symbol", default="BTC/USD")
     bt.add_argument("--days", type=int, default=180)
+    bt.add_argument(
+        "--end",
+        help="Optional ISO-8601 UTC cutoff; bars timestamped at/after it are excluded.",
+    )
 
     sub.add_parser("scan")
     sub.add_parser("run-hourly")
@@ -30,7 +35,8 @@ def main():
         raise SystemExit("This release refuses to run with LIVE_TRADING_ENABLED=true.")
 
     if args.command == "backtest":
-        df = fetch_hourly(args.symbol, args.days, cfg)
+        end = datetime.fromisoformat(args.end.replace("Z", "+00:00")) if args.end else None
+        df = fetch_hourly(args.symbol, args.days, cfg, end=end)
         result = run_backtest(args.symbol, df, cfg)
         print(json.dumps(asdict(result), indent=2))
         return

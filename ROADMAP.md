@@ -3,6 +3,10 @@
 ## V0 — now
 Deterministic BTC/ETH hourly desk, backtest, risk engine, prediction ledger.
 
+Baseline status (2026-08-30): failed the edge test. All eight 90/180/365/730-day
+BTC/ETH replays had negative net expectancy. Keep live capital at $0 and preserve
+the frozen results in `research/baseline_2026-08-30.md` as the control.
+
 ## V1 — forward-test
 Run every hour and store every agent prediction:
 - technical

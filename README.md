@@ -106,3 +106,12 @@ Do not promote the system because of a few profitable days. Minimum research gat
 - Evidence across more than one market regime
 
 The first live allocation, if the gate is eventually passed, should still be a small fraction of available capital.
+
+## Baseline status
+
+The fixed BTC/USD and ETH/USD desk did **not** demonstrate an edge in the
+90/180/365/730-day baseline ending 2026-08-30. All eight net returns and trade
+expectancies were negative after modeled costs. Live promotion remains blocked.
+
+See [`research/baseline_2026-08-30.md`](research/baseline_2026-08-30.md) for the
+full results, regime diagnostics, and audit findings.
